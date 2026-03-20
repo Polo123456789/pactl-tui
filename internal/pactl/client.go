@@ -134,8 +134,8 @@ func commandError(err error) error {
 type rawInfo struct {
 	ServerName    string `json:"server_name"`
 	ServerVersion string `json:"server_version"`
-	DefaultSink   string `json:"default_sink"`
-	DefaultSource string `json:"default_source"`
+	DefaultSink   string `json:"default_sink_name"`
+	DefaultSource string `json:"default_source_name"`
 }
 
 type rawDevice struct {
@@ -205,7 +205,7 @@ func mapDevice(kind audiomodel.DeviceKind, device rawDevice, defaultName string,
 
 	isMonitor := false
 	if kind == audiomodel.SourceKind {
-		isMonitor = device.MonitorOf != "" && device.MonitorOf != "n/a"
+		isMonitor = isMonitorSource(device)
 	}
 
 	return audiomodel.Device{
@@ -221,6 +221,22 @@ func mapDevice(kind audiomodel.DeviceKind, device rawDevice, defaultName string,
 		ActivePort:    device.ActivePort,
 		IsMonitor:     isMonitor,
 	}
+}
+
+func isMonitorSource(device rawDevice) bool {
+	if device.MonitorOf != "" && device.MonitorOf != "n/a" {
+		return true
+	}
+	if strings.HasSuffix(device.Name, ".monitor") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(device.Properties["device.class"]), "monitor") {
+		return true
+	}
+	if strings.HasPrefix(strings.TrimSpace(device.Description), "Monitor of ") {
+		return true
+	}
+	return false
 }
 
 func resolveCard(device rawDevice, cardsByName, cardsByID map[string]audiomodel.Card) (string, string) {

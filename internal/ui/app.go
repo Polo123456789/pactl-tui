@@ -28,6 +28,8 @@ var (
 	selectedItem     = lipgloss.NewStyle().Foreground(lipgloss.Color("230")).Background(lipgloss.Color("62"))
 	mutedStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	defaultStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	defaultBadge     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("16")).Background(lipgloss.Color("42")).Padding(0, 1)
+	defaultLineStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
 	secondaryStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	statusOKStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
 	statusErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Bold(true)
@@ -332,9 +334,9 @@ func (m model) renderListWithTitle(title string, panelWidth, panelHeight int) st
 	start, end := windowBounds(len(items), selected, height-1)
 	for idx := start; idx < end; idx++ {
 		item := items[idx]
-		defaultMark := " "
+		defaultMark := ""
 		if item.IsDefault {
-			defaultMark = defaultStyle.Render("*")
+			defaultMark = " (D)"
 		}
 
 		muteMark := ""
@@ -342,7 +344,12 @@ func (m model) renderListWithTitle(title string, panelWidth, panelHeight int) st
 			muteMark = mutedStyle.Render(" [mute]")
 		}
 
-		line := fmt.Sprintf("%s %s %s%% %s%s", pointer(idx == selected), defaultMark, fmt.Sprintf("%3d", item.VolumePercent), truncate(item.Description, width-16), muteMark)
+		volumeLabel := fmt.Sprintf("%3d%%", item.VolumePercent)
+		label := deviceListLabel(item)
+		line := fmt.Sprintf("%s %-7s %s%s%s", pointer(idx == selected), volumeLabel, truncate(label, width-18), defaultMark, muteMark)
+		if item.IsDefault && idx != selected {
+			line = defaultLineStyle.Render(line)
+		}
 		if idx == selected {
 			line = selectedItem.Width(width).Render(line)
 		}
@@ -366,7 +373,11 @@ func (m model) renderDetail(panelWidth, panelHeight int) string {
 		fmt.Sprintf("Estado: %s", device.State),
 		fmt.Sprintf("Volumen: %d%%", device.VolumePercent),
 		fmt.Sprintf("Mute: %s", onOff(device.Mute)),
-		fmt.Sprintf("Default: %s", onOff(device.IsDefault)),
+	}
+	if device.IsDefault {
+		lines = append(lines, defaultBadge.Render("DEFAULT"))
+	} else {
+		lines = append(lines, "Default: no")
 	}
 
 	if device.ActivePort != "" {
@@ -671,6 +682,43 @@ func shortName(value string) string {
 		return "-"
 	}
 	return truncate(value, 32)
+}
+
+func deviceListLabel(device audiomodel.Device) string {
+	port := cleanPortLabel(device.ActivePort)
+	if port != "" && prefersPortLabel(device, port) {
+		return port
+	}
+	return device.Description
+}
+
+func prefersPortLabel(device audiomodel.Device, port string) bool {
+	description := strings.ToLower(device.Description)
+	portLower := strings.ToLower(port)
+
+	if strings.Contains(portLower, "hdmi") || strings.Contains(portLower, "displayport") {
+		return true
+	}
+	if strings.Contains(description, "hdmi / displayport") {
+		return true
+	}
+	if strings.Contains(description, portLower) {
+		return true
+	}
+	return false
+}
+
+func cleanPortLabel(port string) string {
+	port = strings.TrimSpace(port)
+	if port == "" {
+		return ""
+	}
+	if strings.HasPrefix(port, "[") {
+		if idx := strings.Index(port, "] "); idx >= 0 {
+			port = port[idx+2:]
+		}
+	}
+	return strings.TrimSpace(port)
 }
 
 func firstNonEmpty(values ...string) string {
